@@ -3,24 +3,6 @@
 <head>
     <title>Interactive Grid</title>
     <style>
-        .grid-container {
-            display: inline-block;
-            border: 1px solid #333;
-            margin: 20px 0;
-        }
-        .grid-row {
-            display: flex;
-        }
-        .cell {
-            width: 2px;
-            height: 2px;
-            border: 0px solid #ccc;
-            background-color: black;
-            cursor: pointer;
-        }
-        .cell.white {
-            background-color: white;
-        }
         .controls {
             margin: 20px 0;
         }
@@ -28,101 +10,120 @@
             width: 60px;
             margin-right: 10px;
         }
+        canvas {
+            border: 1px solid #333;
+        }
     </style>
 </head>
 <body>
     <div class="controls">
-        Rows: <input type="number" id="rows" value="10" min="1" max="50">
-        Columns: <input type="number" id="cols" value="10" min="1" max="50">
+        Rows: <input type="number" id="rows" value="10" min="1" max="400">
+        Columns: <input type="number" id="cols" value="10" min="1" max="400">
+        Cell Size: <input type="number" id="cellSize" value="10" min="1" max="50">
         <button onclick="createGrid()">Create Grid</button>
     </div>
     <div class="controls">
         <button id="startBtn" onclick="startSimulation()">Start</button>
         <button id="pauseBtn" onclick="pauseSimulation()" disabled>Pause</button>
     </div>
-    <div id="gridContainer" class="grid-container"></div>
+    <canvas id="gridCanvas"></canvas>
 
     <script>
         let grid = [];
         let simulationInterval;
         let isRunning = false;
+        let canvas, ctx;
+        let N, M;
+        let cellSize = 10; // Default cell size
 
         function createGrid() {
             const rows = parseInt(document.getElementById('rows').value);
             const cols = parseInt(document.getElementById('cols').value);
-            
+            cellSize = parseInt(document.getElementById('cellSize').value); // Get cell size
+            N = rows;
+            M = cols;
+
             // Initialize grid array
             grid = Array(rows).fill().map(() => Array(cols).fill(0));
-            
-            // Create HTML grid
-            const container = document.getElementById('gridContainer');
-            container.innerHTML = '';
-            
-            for (let i = 0; i < rows; i++) {
-                const rowDiv = document.createElement('div');
-                rowDiv.className = 'grid-row';
-                
-                for (let j = 0; j < cols; j++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.onclick = () => toggleCell(i, j);
-                    rowDiv.appendChild(cell);
-                }
-                
-                container.appendChild(rowDiv);
-            }
-            
+
+            // Setup canvas
+            canvas = document.getElementById('gridCanvas');
+            canvas.width = cols * cellSize; // Scale canvas width
+            canvas.height = rows * cellSize; // Scale canvas height
+            ctx = canvas.getContext('2d');
+
             // Reset simulation state
             pauseSimulation();
+            drawGrid();
         }
 
-        function toggleCell(row, col) {
-            if (!isRunning) {
-                grid[row][col] = grid[row][col] === 0 ? 1 : 0;
-                const cells = document.getElementsByClassName('cell');
-                const index = row * grid[0].length + col;
-                cells[index].classList.toggle('white');
-            }
-        }
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+            ctx.fillStyle = 'black'; // Set fill color for live cells
 
-        function updateDisplay() {
-            const cells = document.getElementsByClassName('cell');
             for (let i = 0; i < grid.length; i++) {
                 for (let j = 0; j < grid[0].length; j++) {
-                    const index = i * grid[0].length + j;
-                    cells[index].classList.toggle('white', grid[i][j] === 1);
+                    if (grid[i][j] === 1) {
+                        // Draw a rectangle for each live cell, scaled by cellSize
+                        ctx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
+                    }
                 }
             }
+        }
+
+        function toggleCell(event) {
+            if (!isRunning) {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                // Convert mouse coordinates to grid coordinates
+                const row = Math.floor(y / cellSize);
+                const col = Math.floor(x / cellSize);
+
+                if (isValid(row, col)) {
+                    grid[row][col] = grid[row][col] === 0 ? 1 : 0;
+                    drawGrid();
+                }
+            }
+        }
+
+        function isValid(x, y) {
+            if (x >= 0 && x < N && y >= 0 && y < M) {
+                return true;
+            }
+            return false;
         }
 
         function updateGrid() {
-            // Create a copy of the current grid
             const newGrid = grid.map(row => [...row]);
-            
-            // Example rule: A cell becomes white if it has an odd number of white neighbors
+
             for (let i = 0; i < grid.length; i++) {
                 for (let j = 0; j < grid[0].length; j++) {
-                    let whiteNeighbors = 0;
-                    
-                    // Check all 8 neighbors
+                    let v = grid[i][j];
+                    let cnt = 0;
+
+                    // Count live neighbors (excluding the cell itself)
                     for (let di = -1; di <= 1; di++) {
                         for (let dj = -1; dj <= 1; dj++) {
-                            if (di === 0 && dj === 0) continue;
-                            
-                            const ni = (i + di + grid.length) % grid.length;
-                            const nj = (j + dj + grid[0].length) % grid[0].length;
-                            
-                            whiteNeighbors += grid[ni][nj];
+                            if (di === 0 && dj === 0) continue; // Skip the cell itself
+                            if (isValid(i + di, j + dj) && grid[i + di][j + dj] === 1) {
+                                cnt += 1;
+                            }
                         }
                     }
-                    
-                    // Update cell based on neighbor count
-                    newGrid[i][j] = whiteNeighbors % 2 === 1 ? 1 : 0;
+
+                    // Apply Conway's Game of Life rules
+                    if (v === 0 && cnt === 3) {
+                        newGrid[i][j] = 1; // Cell becomes alive
+                    } else if (v === 1 && (cnt < 2 || cnt > 3)) {
+                        newGrid[i][j] = 0; // Cell dies
+                    }
                 }
             }
-            
+
             grid = newGrid;
-            updateDisplay();
+            drawGrid();
         }
 
         function startSimulation() {
@@ -130,7 +131,7 @@
                 isRunning = true;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('pauseBtn').disabled = false;
-                simulationInterval = setInterval(updateGrid, 500);
+                simulationInterval = setInterval(updateGrid, 100);
             }
         }
 
@@ -143,6 +144,7 @@
 
         // Create initial grid
         createGrid();
+        canvas.addEventListener('click', toggleCell);
     </script>
 </body>
 </html>
