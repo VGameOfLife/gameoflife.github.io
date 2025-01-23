@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Interactive Grid</title>
+    <title>Interactive Grid with Stats</title>
     <style>
         .controls {
             margin: 20px 0;
@@ -28,15 +28,37 @@
         <button id="startBtn" onclick="startSimulation()">Start</button>
         <button id="pauseBtn" onclick="pauseSimulation()" disabled>Pause</button>
     </div>
+    <div class="controls">
+        <p id="aliveCells">Alive/Total: 0/0</p>
+        <p id="elapsedTime">Time: 0s</p>
+    </div>
     <canvas id="gridCanvas"></canvas>
 
     <script>
         let grid = [];
         let simulationInterval;
+        let elapsedTimeInterval;
         let isRunning = false;
         let canvas, ctx;
         let N, M;
         let cellSize = 10;
+        let startTime;
+
+        function countAliveCells() {
+            let aliveCount = 0;
+            for (let row of grid) {
+                for (let cell of row) {
+                    if (cell === 1) aliveCount++;
+                }
+            }
+            return aliveCount;
+        }
+
+        function updateStats() {
+            const aliveCount = countAliveCells();
+            const totalCells = N * M;
+            document.getElementById('aliveCells').innerText = `Alive/Total: ${aliveCount}/${totalCells}`;
+        }
 
         function createGrid() {
             const rows = parseInt(document.getElementById('rows').value);
@@ -57,6 +79,7 @@
             // Reset simulation state
             pauseSimulation();
             seedGrid(); // Automatically seed the grid on creation
+            updateStats(); // Initialize stats
         }
 
         function seedGrid() {
@@ -77,6 +100,7 @@
             }
 
             drawGrid();
+            updateStats(); // Update stats after seeding
         }
 
         function drawGrid() {
@@ -101,15 +125,10 @@
                 const row = Math.floor(y / cellSize);
                 const col = Math.floor(x / cellSize);
 
-                if (isValid(row, col)) {
-                    grid[row][col] = grid[row][col] === 0 ? 1 : 0;
-                    drawGrid();
-                }
+                grid[row][col] = grid[row][col] === 0 ? 1 : 0;
+                drawGrid();
+                updateStats(); // Update stats on manual toggle
             }
-        }
-
-        function isValid(x, y) {
-            return x >= 0 && x < N && y >= 0 && y < M;
         }
 
         function updateGrid() {
@@ -117,24 +136,26 @@
 
             for (let i = 0; i < grid.length; i++) {
                 for (let j = 0; j < grid[0].length; j++) {
-                    let v = grid[i][j];
                     let cnt = 0;
 
                     for (let di = -1; di <= 1; di++) {
                         for (let dj = -1; dj <= 1; dj++) {
                             if (di === 0 && dj === 0) continue;
+
+                            // Wrap around the grid using modular arithmetic
                             const ni = (i + di + N) % N; // Row wrapping
                             const nj = (j + dj + M) % M; // Column wrapping
-        
+
                             if (grid[ni][nj] === 1) {
                                 cnt += 1;
                             }
                         }
                     }
 
-                    if (v === 0 && cnt === 3) {
+                    // Apply Conway's Game of Life rules
+                    if (grid[i][j] === 0 && cnt === 3) {
                         newGrid[i][j] = 1;
-                    } else if (v === 1 && (cnt < 2 || cnt > 3)) {
+                    } else if (grid[i][j] === 1 && (cnt < 2 || cnt > 3)) {
                         newGrid[i][j] = 0;
                     }
                 }
@@ -149,7 +170,18 @@
                 isRunning = true;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('pauseBtn').disabled = false;
-                simulationInterval = setInterval(updateGrid, 100);
+
+                // Start tracking time
+                startTime = Date.now();
+                elapsedTimeInterval = setInterval(() => {
+                    const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                    document.getElementById('elapsedTime').innerText = `Time: ${elapsedSeconds}s`;
+                }, 1000);
+
+                simulationInterval = setInterval(() => {
+                    updateGrid();
+                    updateStats(); // Update alive/total count
+                }, 100);
             }
         }
 
@@ -157,6 +189,9 @@
             isRunning = false;
             document.getElementById('startBtn').disabled = false;
             document.getElementById('pauseBtn').disabled = true;
+
+            // Stop tracking time
+            clearInterval(elapsedTimeInterval);
             clearInterval(simulationInterval);
         }
 
